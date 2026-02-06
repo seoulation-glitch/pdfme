@@ -6,22 +6,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Enable Corepack (for pnpm/yarn)
+      - name: Enable Corepack
         run: corepack enable
 
-      - name: Install dependencies (auto)
+      - name: Install dependencies (root)
         run: |
-          # Install at repo root (monorepo)
           if [ -f pnpm-lock.yaml ]; then
             pnpm install
           elif [ -f yarn.lock ]; then
@@ -32,24 +29,22 @@ jobs:
             npm install
           fi
 
-      - name: Build playground (skip thumbnail generation)
+      - name: Build playground dist (NO thumbnails, NO npm build)
         run: |
-          # Move into playground
           cd playground
 
-          # This is the step that succeeded in your log.
-          # Thumbnail generation fails due to Node "exports" restrictions, so we skip it.
+          # 1) index.json만 생성 (썸네일 스크립트는 실행 금지)
           node scripts/generate-templates-list-json.mjs
 
-          # Build dist with Vite
+          # 2) package.json의 build 스크립트는 쓰지 않고 vite만 직접 실행
           if [ -f ../pnpm-lock.yaml ]; then
-            pnpm vite build
+            pnpm exec vite build
             pnpm run copy-vercel-config
           elif [ -f ../yarn.lock ]; then
             yarn vite build
             yarn run copy-vercel-config
           else
-            npx vite build
+            npx --yes vite build
             npm run copy-vercel-config
           fi
 
@@ -59,7 +54,7 @@ jobs:
           cd playground
           zip -r playground-dist.zip dist
 
-      - name: Upload artifact (zip)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: playground-dist
