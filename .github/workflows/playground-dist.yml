@@ -1,2 +1,72 @@
-name: temp
-on: workflow_dispatch
+name: Build playground dist (zip)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show repo layout
+        run: |
+          ls -la
+          echo "----"
+          find . -maxdepth 3 -name "package.json" -o -name "pnpm-lock.yaml" -o -name "yarn.lock" -o -name "package-lock.json" -o -name "playground" | sed 's|^\./||'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps (auto)
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install
+          elif [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build playground (auto)
+        run: |
+          if [ -d playground ]; then
+            cd playground
+          fi
+
+          if [ -f pnpm-lock.yaml ] || [ -f ../pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm run build
+          elif [ -f yarn.lock ] || [ -f ../yarn.lock ]; then
+            corepack enable
+            yarn build
+          else
+            npm run build
+          fi
+
+      - name: Zip dist
+        run: |
+          echo "---- find dist/build candidates ----"
+          find . -maxdepth 3 -type d \( -name dist -o -name build \) -print
+          echo "----"
+          if [ -d playground/dist ]; then
+            zip -r playground-dist.zip playground/dist
+          elif [ -d dist ]; then
+            zip -r playground-dist.zip dist
+          elif [ -d build ]; then
+            zip -r playground-dist.zip build
+          else
+            echo "No dist/build folder found" && exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-dist
+          path: playground-dist.zip
