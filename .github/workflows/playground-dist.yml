@@ -33,6 +33,7 @@ jobs:
           else
             npm install
           fi
+
       - name: Patch thumbnail script (exports fix)
         run: |
           echo "Before patch:"
