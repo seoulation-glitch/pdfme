@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -16,45 +17,50 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Patch ALL lucide imports in packages/ui (ts/tsx/js/jsx/mjs/cjs) and assert none remain
+      - name: Pre-scan lucide references in packages/ui (source only)
         run: |
           set -e
+          echo "=== Grep 'lucide' in packages/ui (excluding node_modules/dist) ==="
+          grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
+            "lucide" packages/ui || true
 
-          echo "=== BEFORE: find any lucide imports/require in packages/ui ==="
-          # from 'lucide' / "lucide"
-          grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
-            "from ['\"]lucide['\"]" packages/ui || true
-          # require('lucide') / require("lucide")
-          grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
-            "require\(['\"]lucide['\"]\)" packages/ui || true
-          # import('lucide') dynamic import
-          grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
-            "import\(['\"]lucide['\"]\)" packages/ui || true
-
-          echo "=== PATCH: replace lucide -> lucide-react in code files ==="
-          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" \) -print0 \
-            | xargs -0 sed -i -E "s/from ([\"'])lucide\\1/from \\1lucide-react\\1/g"
-
-          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" \) -print0 \
-            | xargs -0 sed -i -E "s/require\\(([\"'])lucide\\1\\)/require(\\1lucide-react\\1)/g"
-
-          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" \) -print0 \
-            | xargs -0 sed -i -E "s/import\\(([\"'])lucide\\1\\)/import(\\1lucide-react\\1)/g"
-
-          echo "=== AFTER: assert no lucide imports/require remain ==="
-          if grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
-              -E "from ['\"]lucide['\"]|require\(['\"]lucide['\"]\)|import\(['\"]lucide['\"]\)" packages/ui; then
-            echo "ERROR: lucide import/require still exists in packages/ui. Fix the remaining lines above."
-            exit 1
-          fi
-
-          echo "OK: packages/ui lucide references replaced."
+          echo "=== Grep exact import/require patterns ==="
+          grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
+            -E "from ['\"]lucide['\"]|require\(['\"]lucide['\"]\)|import\(['\"]lucide['\"]\)" packages/ui || true
 
       - name: Install root deps
-        run: npm ci
+        run: |
+          set -e
+          npm ci
+
+      - name: Check if lucide is installed in workspace
+        run: |
+          set -e
+          echo "=== npm ls lucide (root) ==="
+          npm ls lucide || true
+          echo "=== npm ls lucide (ui workspace) ==="
+          npm -w @pdfme/ui ls lucide || true
+
+          echo "=== show lucide package.json if exists ==="
+          if [ -f node_modules/lucide/package.json ]; then
+            cat node_modules/lucide/package.json | head -n 80
+          fi
+          if [ -f packages/ui/node_modules/lucide/package.json ]; then
+            cat packages/ui/node_modules/lucide/package.json | head -n 80
+          fi
+
+      - name: Remove lucide package if present (diagnostic)
+        run: |
+          set -e
+          rm -rf node_modules/lucide || true
+          rm -rf packages/ui/node_modules/lucide || true
+          rm -rf playground/node_modules/lucide || true
+          echo "Removed lucide folders (if any)."
 
       - name: Build packages (root)
-        run: npm run build
+        run: |
+          set -e
+          npm run build
 
       - name: Install playground deps
         run: |
