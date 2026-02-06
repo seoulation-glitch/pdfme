@@ -19,13 +19,28 @@ jobs:
           node-version: "20"
 
       - name: Install root dependencies (workspaces)
-        run: npm ci
-
-      - name: Install missing build deps in playground (Sentry plugin)
         run: |
           set -e
+          npm ci
+
+      - name: Install @sentry/vite-plugin into playground workspace (important)
+        run: |
+          set -e
+          # 워크스페이스에 정확히 devDependency로 추가 (루트/플레이그라운드 해석 꼬임 방지)
+          npm install -w playground -D @sentry/vite-plugin --no-audit --no-fund
+
+      - name: Verify module resolution (root & playground)
+        run: |
+          set -e
+          echo "Node:" && node -v
+          echo "NPM:" && npm -v
+
+          echo "---- require.resolve from repo root ----"
+          node -e "console.log(require.resolve('@sentry/vite-plugin'))"
+
+          echo "---- require.resolve from playground ----"
           cd playground
-          npm install --no-audit --no-fund @sentry/vite-plugin --save-dev
+          node -e "console.log(require.resolve('@sentry/vite-plugin'))"
 
       - name: Generate templates list only (skip thumbnails)
         run: |
@@ -33,7 +48,7 @@ jobs:
           cd playground
           node scripts/generate-templates-list-json.mjs
 
-      - name: Build dist (direct vite build, skip npm run build)
+      - name: Build dist (direct vite build)
         run: |
           set -e
           cd playground
