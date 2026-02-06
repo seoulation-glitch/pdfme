@@ -6,27 +6,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Show repo layout
-        run: |
-          ls -la
-          echo "----"
-          find . -maxdepth 3 -name "package.json" -o -name "pnpm-lock.yaml" -o -name "yarn.lock" -o -name "package-lock.json" -o -name "playground" | sed 's|^\./||'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Install deps (auto)
+      - name: Enable Corepack (for pnpm/yarn)
+        run: corepack enable
+
+      - name: Install dependencies (auto)
         run: |
+          # Install at repo root (monorepo)
           if [ -f pnpm-lock.yaml ]; then
-            corepack enable
             pnpm install
           elif [ -f yarn.lock ]; then
-            corepack enable
             yarn install
           elif [ -f package-lock.json ]; then
             npm ci
@@ -34,39 +32,35 @@ jobs:
             npm install
           fi
 
-      - name: Build playground (auto)
+      - name: Build playground (skip thumbnail generation)
         run: |
-          if [ -d playground ]; then
-            cd playground
-          fi
+          # Move into playground
+          cd playground
 
-          if [ -f pnpm-lock.yaml ] || [ -f ../pnpm-lock.yaml ]; then
-            corepack enable
-            pnpm run build
-          elif [ -f yarn.lock ] || [ -f ../yarn.lock ]; then
-            corepack enable
-            yarn build
+          # This is the step that succeeded in your log.
+          # Thumbnail generation fails due to Node "exports" restrictions, so we skip it.
+          node scripts/generate-templates-list-json.mjs
+
+          # Build dist with Vite
+          if [ -f ../pnpm-lock.yaml ]; then
+            pnpm vite build
+            pnpm run copy-vercel-config
+          elif [ -f ../yarn.lock ]; then
+            yarn vite build
+            yarn run copy-vercel-config
           else
-            npm run build
+            npx vite build
+            npm run copy-vercel-config
           fi
 
       - name: Zip dist
         run: |
-          echo "---- find dist/build candidates ----"
-          find . -maxdepth 3 -type d \( -name dist -o -name build \) -print
-          echo "----"
-          if [ -d playground/dist ]; then
-            zip -r playground-dist.zip playground/dist
-          elif [ -d dist ]; then
-            zip -r playground-dist.zip dist
-          elif [ -d build ]; then
-            zip -r playground-dist.zip build
-          else
-            echo "No dist/build folder found" && exit 1
-          fi
+          test -d playground/dist
+          cd playground
+          zip -r playground-dist.zip dist
 
-      - name: Upload artifact
+      - name: Upload artifact (zip)
         uses: actions/upload-artifact@v4
         with:
           name: playground-dist
-          path: playground-dist.zip
+          path: playground/playground-dist.zip
