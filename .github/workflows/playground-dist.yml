@@ -6,7 +6,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,47 +14,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
 
-      - name: Install root dependencies
+      - name: Install root deps
         run: npm ci
 
-      - name: Patch Vite config to avoid @sentry/vite-plugin (CI stub)
-        run: |
-          set -e
-          FILE="playground/vite.config.ts"
+      - name: Build packages (root)
+        run: npm run build
 
-          echo "=== BEFORE: lines containing @sentry/vite-plugin ==="
-          grep -n "@sentry/vite-plugin" "$FILE" || true
-
-          # Create local stub module (CommonJS) WITHOUT heredoc (avoid YAML parsing issues)
-          printf "%s\n" \
-            "function sentryVitePlugin() {" \
-            "  return { name: 'sentry-vite-plugin-ci-stub' };" \
-            "}" \
-            "module.exports = { sentryVitePlugin };" \
-            > playground/ci-sentry-vite-plugin.cjs
-
-          # Replace all occurrences of the module specifier
-          sed -i "s|@sentry/vite-plugin|./ci-sentry-vite-plugin.cjs|g" "$FILE"
-
-          echo "=== AFTER: lines containing ci-sentry-vite-plugin ==="
-          grep -n "ci-sentry-vite-plugin.cjs" "$FILE" || true
-
-          echo "=== ASSERT: fail if @sentry/vite-plugin still exists ==="
-          if grep -n "@sentry/vite-plugin" "$FILE"; then
-            echo "Patch failed: still contains @sentry/vite-plugin"
-            exit 1
-          fi
-
-      - name: Generate templates list only (skip thumbnails)
-        run: node playground/scripts/generate-templates-list-json.mjs
-
-      - name: Build dist (direct vite build)
+      - name: Install playground deps
         run: |
           set -e
           cd playground
-          npx --yes vite build
-          npm run copy-vercel-config
+          npm install
+
+      - name: Verify sentry plugin exists
+        run: |
+          set -e
+          cd playground
+          node -e "console.log(require.resolve('@sentry/vite-plugin'))"
+
+      - name: Build playground dist
+        run: |
+          set -e
+          cd playground
+          npm run build
 
       - name: Zip dist
         run: |
