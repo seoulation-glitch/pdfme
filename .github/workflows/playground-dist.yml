@@ -27,13 +27,13 @@ jobs:
           echo "=== BEFORE: lines containing @sentry/vite-plugin ==="
           grep -n "@sentry/vite-plugin" "$FILE" || true
 
-          # Create local stub module (CommonJS)
-          cat > playground/ci-sentry-vite-plugin.cjs <<'JS'
-function sentryVitePlugin() {
-  return { name: 'sentry-vite-plugin-ci-stub' };
-}
-module.exports = { sentryVitePlugin };
-JS
+          # Create local stub module (CommonJS) WITHOUT heredoc (avoid YAML parsing issues)
+          printf "%s\n" \
+            "function sentryVitePlugin() {" \
+            "  return { name: 'sentry-vite-plugin-ci-stub' };" \
+            "}" \
+            "module.exports = { sentryVitePlugin };" \
+            > playground/ci-sentry-vite-plugin.cjs
 
           # Replace all occurrences of the module specifier
           sed -i "s|@sentry/vite-plugin|./ci-sentry-vite-plugin.cjs|g" "$FILE"
