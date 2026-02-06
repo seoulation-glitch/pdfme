@@ -10,57 +10,54 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: |
-            package-lock.json
-            playground/package-lock.json
 
       - name: Install root deps (workspaces)
         run: |
           set -e
           npm ci
 
-      - name: CI patch - replace @sentry/vite-plugin with local stub (always works)
+      - name: CI patch - force replace @sentry/vite-plugin with local stub
         run: |
           set -e
+          FILE="playground/vite.config.ts"
 
-          # 1) 로컬 스텁 모듈 생성 (CJS: require/import 둘 다 안전하게 처리)
+          echo "=== BEFORE: show sentry lines ==="
+          grep -n "@sentry/vite-plugin" "$FILE" || true
+
+          # 로컬 스텁 파일 생성 (CJS)
           cat > playground/ci-sentry-vite-plugin.cjs <<'JS'
-/**
- * CI stub for @sentry/vite-plugin
- * Provides a no-op plugin so Vite config loads without external dependency.
- */
 function sentryVitePlugin() {
   return { name: 'sentry-vite-plugin-ci-stub' };
 }
 module.exports = { sentryVitePlugin };
 JS
 
-          FILE="playground/vite.config.ts"
-
-          echo "---- BEFORE (sentry lines) ----"
-          (grep -n "@sentry/vite-plugin" "$FILE" || true)
-
-          # 2) vite.config.ts의 "@sentry/vite-plugin" 문자열을 로컬 파일로 치환
-          #    (import/require 형태 상관없이 문자열만 바꾸면 해결됨)
+          # 문자열 치환 (따옴표/형태 상관없이 문자열만 바꿈)
           sed -i "s|@sentry/vite-plugin|./ci-sentry-vite-plugin.cjs|g" "$FILE"
 
-          echo "---- AFTER (stub lines) ----"
-          (grep -n "ci-sentry-vite-plugin.cjs" "$FILE" || true)
+          echo "=== AFTER: show stub lines ==="
+          grep -n "ci-sentry-vite-plugin.cjs" "$FILE" || true
+
+          echo "=== ASSERT: if @sentry/vite-plugin still exists -> FAIL ==="
+          if grep -n "@sentry/vite-plugin" "$FILE"; then
+            echo "Patch failed: still contains @sentry/vite-plugin"
+            exit 1
+          fi
+
+          echo "=== Show vite.config.ts around line 20~60 ==="
+          nl -ba "$FILE" | sed -n '20,80p'
 
       - name: Generate templates list only (skip thumbnails)
         run: |
           set -e
           node playground/scripts/generate-templates-list-json.mjs
 
-      - name: Build dist (direct vite build, skip npm run build)
+      - name: Build dist (direct vite build)
         run: |
           set -e
           cd playground
