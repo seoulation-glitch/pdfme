@@ -16,20 +16,39 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Patch lucide imports in @pdfme/ui to use lucide-react
+      - name: Patch ALL lucide imports in packages/ui (ts/tsx/js/jsx/mjs/cjs) and assert none remain
         run: |
           set -e
-          echo "Searching lucide imports in packages/ui..."
-          # TS/TSX에서 import ... from 'lucide' / "lucide" 를 lucide-react로 치환
-          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" \) -print0 \
-            | xargs -0 grep -n "from ['\"]lucide['\"]" || true
 
-          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" \) -print0 \
+          echo "=== BEFORE: find any lucide imports/require in packages/ui ==="
+          # from 'lucide' / "lucide"
+          grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
+            "from ['\"]lucide['\"]" packages/ui || true
+          # require('lucide') / require("lucide")
+          grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
+            "require\(['\"]lucide['\"]\)" packages/ui || true
+          # import('lucide') dynamic import
+          grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
+            "import\(['\"]lucide['\"]\)" packages/ui || true
+
+          echo "=== PATCH: replace lucide -> lucide-react in code files ==="
+          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" \) -print0 \
             | xargs -0 sed -i -E "s/from ([\"'])lucide\\1/from \\1lucide-react\\1/g"
 
-          echo "After patch:"
-          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" \) -print0 \
-            | xargs -0 grep -n "from ['\"]lucide['\"]" || true
+          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" \) -print0 \
+            | xargs -0 sed -i -E "s/require\\(([\"'])lucide\\1\\)/require(\\1lucide-react\\1)/g"
+
+          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" \) -print0 \
+            | xargs -0 sed -i -E "s/import\\(([\"'])lucide\\1\\)/import(\\1lucide-react\\1)/g"
+
+          echo "=== AFTER: assert no lucide imports/require remain ==="
+          if grep -RIn --include='*.ts'  --include='*.tsx' --include='*.js' --include='*.jsx' --include='*.mjs' --include='*.cjs' \
+              -E "from ['\"]lucide['\"]|require\(['\"]lucide['\"]\)|import\(['\"]lucide['\"]\)" packages/ui; then
+            echo "ERROR: lucide import/require still exists in packages/ui. Fix the remaining lines above."
+            exit 1
+          fi
+
+          echo "OK: packages/ui lucide references replaced."
 
       - name: Install root deps
         run: npm ci
