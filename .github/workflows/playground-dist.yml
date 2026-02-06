@@ -34,19 +34,6 @@ jobs:
             npm install
           fi
 
-      - name: Patch thumbnail script (exports fix)
-        run: |
-          echo "Before patch:"
-          grep -n "@pdfme/generator" playground/scripts/generate-templates-thumbnail.mjs || true
-
-          # replace deep import with public entry
-          sed -i 's#@pdfme/generator/cjs/src/index.js#@pdfme/generator#g' playground/scripts/generate-templates-thumbnail.mjs || true
-          sed -i 's#@pdfme/generator/cjs/src/index#@pdfme/generator#g' playground/scripts/generate-templates-thumbnail.mjs || true
-          sed -i 's#@pdfme/generator/cjs#@pdfme/generator#g' playground/scripts/generate-templates-thumbnail.mjs || true
-
-          echo "After patch:"
-          grep -n "@pdfme/generator" playground/scripts/generate-templates-thumbnail.mjs || true
-
       - name: Build playground (auto)
         run: |
           if [ -d playground ]; then
