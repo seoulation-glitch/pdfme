@@ -6,10 +6,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Find lucide references in packages/ui (must be zero)
+        run: |
+          set -e
+          echo "=== Searching 'lucide' in packages/ui (excluding node_modules/dist) ==="
+          grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
+            "lucide" packages/ui || true
+
+          echo "=== If anything printed above, fix those lines and re-run. ==="
+          if grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
+            "lucide" packages/ui; then
+            echo "ERROR: lucide references still exist in packages/ui"
+            exit 1
+          fi
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -17,62 +30,17 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Pre-scan lucide references in packages/ui (source only)
-        run: |
-          set -e
-          echo "=== Grep 'lucide' in packages/ui (excluding node_modules/dist) ==="
-          grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
-            "lucide" packages/ui || true
-
-          echo "=== Grep exact import/require patterns ==="
-          grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
-            -E "from ['\"]lucide['\"]|require\(['\"]lucide['\"]\)|import\(['\"]lucide['\"]\)" packages/ui || true
-
       - name: Install root deps
-        run: |
-          set -e
-          npm ci
-
-      - name: Check if lucide is installed in workspace
-        run: |
-          set -e
-          echo "=== npm ls lucide (root) ==="
-          npm ls lucide || true
-          echo "=== npm ls lucide (ui workspace) ==="
-          npm -w @pdfme/ui ls lucide || true
-
-          echo "=== show lucide package.json if exists ==="
-          if [ -f node_modules/lucide/package.json ]; then
-            cat node_modules/lucide/package.json | head -n 80
-          fi
-          if [ -f packages/ui/node_modules/lucide/package.json ]; then
-            cat packages/ui/node_modules/lucide/package.json | head -n 80
-          fi
-
-      - name: Remove lucide package if present (diagnostic)
-        run: |
-          set -e
-          rm -rf node_modules/lucide || true
-          rm -rf packages/ui/node_modules/lucide || true
-          rm -rf playground/node_modules/lucide || true
-          echo "Removed lucide folders (if any)."
+        run: npm ci
 
       - name: Build packages (root)
-        run: |
-          set -e
-          npm run build
+        run: npm run build
 
       - name: Install playground deps
         run: |
           set -e
           cd playground
           npm install
-
-      - name: Verify sentry plugin exists
-        run: |
-          set -e
-          cd playground
-          node -e "console.log(require.resolve('@sentry/vite-plugin'))"
 
       - name: Build playground dist
         run: |
