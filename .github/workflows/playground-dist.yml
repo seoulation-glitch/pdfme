@@ -16,14 +16,23 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install root deps
-        run: npm ci
-
-      - name: Install missing dependency for @pdfme/ui (lucide)
+      - name: Patch lucide imports in @pdfme/ui to use lucide-react
         run: |
           set -e
-          # packages/ui 빌드에서 lucide를 찾는데 없어서 터짐 -> 워크스페이스에 추가 설치
-          npm install -w @pdfme/ui lucide --no-audit --no-fund
+          echo "Searching lucide imports in packages/ui..."
+          # TS/TSX에서 import ... from 'lucide' / "lucide" 를 lucide-react로 치환
+          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" \) -print0 \
+            | xargs -0 grep -n "from ['\"]lucide['\"]" || true
+
+          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" \) -print0 \
+            | xargs -0 sed -i -E "s/from ([\"'])lucide\\1/from \\1lucide-react\\1/g"
+
+          echo "After patch:"
+          find packages/ui -type f \( -name "*.ts" -o -name "*.tsx" \) -print0 \
+            | xargs -0 grep -n "from ['\"]lucide['\"]" || true
+
+      - name: Install root deps
+        run: npm ci
 
       - name: Build packages (root)
         run: npm run build
