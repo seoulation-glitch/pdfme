@@ -6,8 +6,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -29,11 +31,35 @@ jobs:
             npm install
           fi
 
+      - name: Patch playground Vite config to disable Sentry in CI
+        run: |
+          set -e
+          FILE="playground/vite.config.ts"
+
+          echo "---- before patch (grep sentry) ----"
+          (grep -n "sentry" "$FILE" || true)
+          (grep -n "@sentry" "$FILE" || true)
+
+          # 1) @sentry/vite-plugin import/require 줄을 주석 처리
+          #   - import { sentryVitePlugin } from '@sentry/vite-plugin'
+          #   - const { sentryVitePlugin } = require('@sentry/vite-plugin')
+          sed -i -E "s/^([[:space:]]*import[[:space:]].*from[[:space:]]+['\"]@sentry\/vite-plugin['\"];?)/\/\/ [CI-disabled] \1/g" "$FILE" || true
+          sed -i -E "s/^([[:space:]]*(const|let|var)[[:space:]].*require\(['\"]@sentry\/vite-plugin['\"]\);?)/\/\/ [CI-disabled] \1/g" "$FILE" || true
+
+          # 2) sentryVitePlugin(...) 호출을 통째로 주석 처리 (없어도 빌드 가능)
+          #    배열요소로 들어간 형태까지 최대한 넓게 잡아서 무력화
+          sed -i -E "s/([[:space:]]*)(sentryVitePlugin\([^)]*\),?)/\1\/\/ [CI-disabled] \2/g" "$FILE" || true
+
+          echo "---- after patch (grep sentry) ----"
+          (grep -n "sentry" "$FILE" || true)
+          (grep -n "@sentry" "$FILE" || true)
+
       - name: Build playground dist (NO thumbnails, NO npm build)
         run: |
+          set -e
           cd playground
 
-          # 1) index.json만 생성 (썸네일 스크립트는 실행 금지)
+          # 1) index.json만 생성 (썸네일 생성은 문제라서 실행 금지)
           node scripts/generate-templates-list-json.mjs
 
           # 2) package.json의 build 스크립트는 쓰지 않고 vite만 직접 실행
@@ -50,11 +76,12 @@ jobs:
 
       - name: Zip dist
         run: |
+          set -e
           test -d playground/dist
           cd playground
           zip -r playground-dist.zip dist
 
-      - name: Upload artifact
+      - name: Upload artifact (zip)
         uses: actions/upload-artifact@v4
         with:
           name: playground-dist
