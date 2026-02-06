@@ -10,20 +10,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find lucide references in packages/ui (must be zero)
-        run: |
-          set -e
-          echo "=== Searching 'lucide' in packages/ui (excluding node_modules/dist) ==="
-          grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
-            "lucide" packages/ui || true
-
-          echo "=== If anything printed above, fix those lines and re-run. ==="
-          if grep -RIn --exclude-dir node_modules --exclude-dir dist --exclude-dir build \
-            "lucide" packages/ui; then
-            echo "ERROR: lucide references still exist in packages/ui"
-            exit 1
-          fi
-
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
@@ -32,6 +18,13 @@ jobs:
 
       - name: Install root deps
         run: npm ci
+
+      - name: Install lucide explicitly for @pdfme/ui (fix resolve entry)
+        run: |
+          set -e
+          npm install -w @pdfme/ui lucide@0.563.0 --no-audit --no-fund
+          echo "=== verify lucide package.json ==="
+          cat node_modules/lucide/package.json | head -n 80 || true
 
       - name: Build packages (root)
         run: npm run build
