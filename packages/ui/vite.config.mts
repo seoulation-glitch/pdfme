@@ -7,6 +7,14 @@ export default defineConfig(({ mode }) => {
   return {
     define: { 'process.env.NODE_ENV': JSON.stringify(mode) },
     plugins: [react(), tsconfigPaths({ root: '.' }), cssInjectedByJsPlugin()],
+
+    // ✅ lucide를 lucide-react로 강제 매핑 (Vite가 lucide 엔트리 해석 실패하는 문제 해결)
+    resolve: {
+      alias: {
+        lucide: 'lucide-react',
+      },
+    },
+
     build: {
       lib: {
         entry: 'src/index.ts',
