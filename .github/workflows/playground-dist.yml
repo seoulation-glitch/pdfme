@@ -1,59 +1,56 @@
-name: Build Playground Dist (Artifact)
+name: Playground Dist (Artifact)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-playground-dist:
+  playground-dist:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node 20
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            playground/package-lock.json
 
-      - name: Install root dependencies (workspaces)
+      - name: Install root deps (workspaces)
         run: |
           set -e
           npm ci
 
-      - name: Install @sentry/vite-plugin into playground workspace (important)
+      - name: Ensure sentry vite plugin (workspace install)
         run: |
           set -e
-          # 워크스페이스에 정확히 devDependency로 추가 (루트/플레이그라운드 해석 꼬임 방지)
           npm install -w playground -D @sentry/vite-plugin --no-audit --no-fund
 
-      - name: Verify module resolution (root & playground)
+      - name: Verify sentry plugin resolvable
         run: |
           set -e
-          echo "Node:" && node -v
-          echo "NPM:" && npm -v
-
-          echo "---- require.resolve from repo root ----"
-          node -e "console.log(require.resolve('@sentry/vite-plugin'))"
-
-          echo "---- require.resolve from playground ----"
-          cd playground
-          node -e "console.log(require.resolve('@sentry/vite-plugin'))"
+          npm -w playground ls @sentry/vite-plugin
+          node -e "console.log('root:', require.resolve('@sentry/vite-plugin'))"
+          node -e "process.chdir('playground'); console.log('playground:', require.resolve('@sentry/vite-plugin'))"
 
       - name: Generate templates list only (skip thumbnails)
         run: |
           set -e
-          cd playground
-          node scripts/generate-templates-list-json.mjs
+          node playground/scripts/generate-templates-list-json.mjs
 
-      - name: Build dist (direct vite build)
+      - name: Build playground dist (direct vite build)
         run: |
           set -e
-          cd playground
-          npx --yes vite build
-          npm run copy-vercel-config
+          npm -w playground exec -- vite build
+          npm -w playground run copy-vercel-config
 
       - name: Zip dist
         run: |
@@ -62,7 +59,7 @@ jobs:
           cd playground
           zip -r playground-dist.zip dist
 
-      - name: Upload artifact (zip)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: playground-dist
