@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  playground-dist:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,20 +16,18 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install root deps (workspaces)
-        run: |
-          set -e
-          npm ci
+      - name: Install root dependencies
+        run: npm ci
 
-      - name: CI patch - force replace @sentry/vite-plugin with local stub
+      - name: Patch Vite config to avoid @sentry/vite-plugin (CI stub)
         run: |
           set -e
           FILE="playground/vite.config.ts"
 
-          echo "=== BEFORE: show sentry lines ==="
+          echo "=== BEFORE: lines containing @sentry/vite-plugin ==="
           grep -n "@sentry/vite-plugin" "$FILE" || true
 
-          # 로컬 스텁 파일 생성 (CJS)
+          # Create local stub module (CommonJS)
           cat > playground/ci-sentry-vite-plugin.cjs <<'JS'
 function sentryVitePlugin() {
   return { name: 'sentry-vite-plugin-ci-stub' };
@@ -37,25 +35,20 @@ function sentryVitePlugin() {
 module.exports = { sentryVitePlugin };
 JS
 
-          # 문자열 치환 (따옴표/형태 상관없이 문자열만 바꿈)
+          # Replace all occurrences of the module specifier
           sed -i "s|@sentry/vite-plugin|./ci-sentry-vite-plugin.cjs|g" "$FILE"
 
-          echo "=== AFTER: show stub lines ==="
+          echo "=== AFTER: lines containing ci-sentry-vite-plugin ==="
           grep -n "ci-sentry-vite-plugin.cjs" "$FILE" || true
 
-          echo "=== ASSERT: if @sentry/vite-plugin still exists -> FAIL ==="
+          echo "=== ASSERT: fail if @sentry/vite-plugin still exists ==="
           if grep -n "@sentry/vite-plugin" "$FILE"; then
             echo "Patch failed: still contains @sentry/vite-plugin"
             exit 1
           fi
 
-          echo "=== Show vite.config.ts around line 20~60 ==="
-          nl -ba "$FILE" | sed -n '20,80p'
-
       - name: Generate templates list only (skip thumbnails)
-        run: |
-          set -e
-          node playground/scripts/generate-templates-list-json.mjs
+        run: node playground/scripts/generate-templates-list-json.mjs
 
       - name: Build dist (direct vite build)
         run: |
@@ -76,4 +69,3 @@ JS
         with:
           name: playground-dist
           path: playground/playground-dist.zip
-
