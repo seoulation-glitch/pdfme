@@ -1,70 +1,54 @@
-name: Build playground dist (zip)
+name: Build Playground Dist (Artifact)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-playground-dist:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Install root dependencies (workspaces)
+        run: npm ci
 
-      - name: Install dependencies (root)
+      - name: Install missing build deps in playground (Sentry plugin)
         run: |
           set -e
-          if [ -f pnpm-lock.yaml ]; then
-            pnpm install
-          elif [ -f yarn.lock ]; then
-            yarn install
-          elif [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          cd playground
+          npm install --no-audit --no-fund @sentry/vite-plugin --save-dev
 
-      - name: Create CI stub for @sentry/vite-plugin (so require() won't fail)
+      - name: Generate templates list only (skip thumbnails)
         run: |
           set -e
+          cd playground
+          node scripts/generate-templates-list-json.mjs
 
-          make_stub () {
-            local base="$1"
-            mkdir -p "${base}/node_modules/@sentry/vite-plugin"
-            cat > "${base}/node_modules/@sentry/vite-plugin/package.json" <<'JSON'
-{
-  "name": "@sentry/vite-plugin",
-  "version": "0.0.0-ci-stub",
-  "main": "index.js"
-}
-JSON
-            cat > "${base}/node_modules/@sentry/vite-plugin/index.js" <<'JS'
-// CI stub for @sentry/vite-plugin
-// Provides a no-op plugin so Vite config can load without installing real Sentry plugin.
-function sentryVitePlugin() {
-  return {
-    name: 'sentry-vite-plugin-ci-stub',
-    apply: 'build'
-  };
-}
-module.exports = { sentryVitePlugin };
-JS
-          }
+      - name: Build dist (direct vite build, skip npm run build)
+        run: |
+          set -e
+          cd playground
+          npx --yes vite build
+          npm run copy-vercel-config
 
-          # Vite config가 어디에서 resolve 하든 잡히게 root / playground 둘 다 만들어 둠
-          make_stub "."
-          make_stub "playground"
+      - name: Zip dist
+        run: |
+          set -e
+          test -d playground/dist
+          cd playground
+          zip -r playground-dist.zip dist
 
-          echo "Stub created:"
-          ls -la node_modules/@sentry/vite-plugin || true
-          ls -la playground/node_modules/@sentry/vite-plugin || true
-
-      - name: B
+      - name: Upload artifact (zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-dist
+          path: playground/playground-dist.zip
